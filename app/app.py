@@ -37,4 +37,16 @@ def add_expense(expense:Expense):
     conn.commit()
     conn.close()
 
+@app.get("/TotalExpenses")
+
+def total_expenses():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT SUM(amount) FROM expenses")
+    total = cur.fetchone()[0]
+    conn.close()
+
+    return total or 0
+   
+
 
