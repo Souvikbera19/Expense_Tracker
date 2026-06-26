@@ -1,16 +1,23 @@
 from datetime import datetime
-from fastapi import FastAPI ,HTTPException
+from fastapi import FastAPI ,HTTPException,Depends
 from app.schemas import Expense
 from app.databse import init_db ,get_conn
+from  fastapi.security import OAuth2PasswordBearer
 
+from typing import Annotated
 app = FastAPI()
 init_db()
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 @app.get("/")
 def home():
     return {"message":"Welcome to expense tracker"}
 
+
+@app.get("/auth")
+def auth(token:Annotated[str,Depends(oauth2_scheme)]):
+    return {"token":token}
 @app.get("/expenses")
 
 def get_expenses():
