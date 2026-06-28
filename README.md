@@ -1,22 +1,25 @@
 # 💸 Expense Tracker API
 
-A lightweight, high-performance Expense Tracker API built with **FastAPI**, **SQLite**, and **Pydantic**. This application allows users to record daily expenses, categorize them, query list of expenses, and track total expenditures.
+A lightweight, secure, and high-performance Expense Tracker API built with **FastAPI**, **SQLite**, and **Pydantic**. The application supports multi-user registration, secure JWT authentication, and isolated expense tracking per user.
 
 ---
 
 ## 🚀 Features
 
-- **Add Expense**: Record new expenses with amount, category, and description.
-- **List Expenses**: View a complete history of all recorded expenses.
-- **Total Expenditure**: Instantly calculate the sum of all recorded expenses.
-- **Auto-Initialization**: Automatic SQLite database schema setup on application start.
-- **Interactive Documentation**: Built-in Swagger and ReDoc interactive API exploratory playgrounds.
+- **User Registration**: Register new accounts securely.
+- **JWT Authentication**: Secure login endpoints providing token-based authentication (OAuth2 password flow).
+- **Add Expense**: Record new expenses with amount, category, description, and auto-populated timestamps, fully isolated per user.
+- **List Expenses**: View history of expenses matching the logged-in user.
+- **Total Expenditure**: Instantly calculate the sum of all expenses recorded by the logged-in user.
+- **Auto-Initialization**: Automatic SQLite database creation and schema setup on application start.
+- **Interactive Documentation**: Built-in Swagger and ReDoc interactive API playgrounds.
 
 ---
 
 ## 🛠️ Tech Stack
 
 - **Framework**: [FastAPI](https://fastapi.tiangolo.com/)
+- **Security & Authentication**: OAuth2, JWT (`pyjwt`), and Argon2 password hashing (`pwdlib[argon2]`)
 - **ASGI Server**: [Uvicorn](https://www.uvicorn.org/)
 - **Database**: SQLite (via standard Python `sqlite3`)
 - **Data Validation**: [Pydantic](https://docs.pydantic.dev/)
@@ -29,13 +32,14 @@ A lightweight, high-performance Expense Tracker API built with **FastAPI**, **SQ
 ```text
 expense_tracker/
 ├── app/
-│   ├── app.py          # FastAPI application routes and logic
-│   ├── databse.py      # SQLite database configuration and initialization
-│   ├── schemas.py      # Pydantic data schemas/models
-│   └── expenses.db     # SQLite database file (created automatically)
+│   ├── app.py          # FastAPI application routes and endpoints
+│   ├── auth.py         # Authentication logic (JWT, password verification, user dependencies)
+│   ├── databse.py      # SQLite database configuration, row factory, and initialization
+│   └── schemas.py      # Pydantic schemas (Expense, User, UserRegister, etc.)
 ├── main.py             # Uvicorn entry point
 ├── pyproject.toml      # Dependency & project configuration
 ├── uv.lock             # uv lockfile for deterministic builds
+├── database.db         # SQLite database file (created automatically in the project root)
 └── README.md           # Project documentation (this file)
 ```
 
@@ -50,7 +54,7 @@ expense_tracker/
 
 ### 1. Installation
 
-Clone the repository and install the dependencies:
+Clone the repository and install all dependencies:
 
 ```bash
 # Sync/install all dependencies into the virtual environment
@@ -72,7 +76,7 @@ The server will run locally at `http://127.0.0.1:8000`.
 ## 📖 API Endpoints & Usage
 
 ### Interactive API Docs
-Once the server is running, you can explore the endpoints interactively via:
+Once the server is running, you can explore and test the endpoints interactively via:
 - **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
@@ -82,7 +86,7 @@ Once the server is running, you can explore the endpoints interactively via:
 
 #### 1. Home / Root
 * **Endpoint**: `GET /`
-* **Description**: Simple API health check and welcome message.
+* **Description**: Simple API health check.
 * **Response**:
   ```json
   {
@@ -90,13 +94,61 @@ Once the server is running, you can explore the endpoints interactively via:
   }
   ```
 
-#### 2. Add an Expense
-* **Endpoint**: `POST /AddExpense`
-* **Description**: Records a new expense.
+#### 2. Register User
+* **Endpoint**: `POST /register`
+* **Description**: Register a new user.
 * **Request Body** (JSON):
-  > [!IMPORTANT]
-  > Note that the JSON body expects `desc` for the description field, which maps to `description` in the database.
-  
+  ```json
+  {
+    "username": "johndoe",
+    "password": "securepassword123",
+    "email": "johndoe@example.com",
+    "full_name": "John Doe"
+  }
+  ```
+* **Response** (`200 OK`):
+  ```json
+  {
+    "id": 1,
+    "username": "johndoe",
+    "email": "johndoe@example.com",
+    "full_name": "John Doe"
+  }
+  ```
+
+#### 3. Log In / Obtain Token
+* **Endpoint**: `POST /token`
+* **Description**: Logs in a user and returns a JWT token. Form data (OAuth2 standard) is required.
+* **Request Body** (Form Data):
+  - `username`: `johndoe`
+  - `password`: `securepassword123`
+* **Response** (`200 OK`):
+  ```json
+  {
+    "access_token": "eyJhbGciOiJIUz...",
+    "token_type": "bearer"
+  }
+  ```
+
+#### 4. Get Current User Profile
+* **Endpoint**: `GET /users/me`
+* **Authentication**: Bearer token required.
+* **Response** (`200 OK`):
+  ```json
+  {
+    "id": 1,
+    "username": "johndoe",
+    "email": "johndoe@example.com",
+    "full_name": "John Doe",
+    "disabled": null
+  }
+  ```
+
+#### 5. Add an Expense
+* **Endpoint**: `POST /AddExpense`
+* **Authentication**: Bearer token required.
+* **Description**: Records a new expense associated with the authenticated user.
+* **Request Body** (JSON):
   ```json
   {
     "amount": 42.50,
@@ -104,27 +156,34 @@ Once the server is running, you can explore the endpoints interactively via:
     "desc": "Lunch at diner"
   }
   ```
-* **Response**: `200 OK` (with no response body on success)
+* **Response** (`200 OK`):
+  ```json
+  {
+    "message": "Expense added successfully"
+  }
+  ```
 
-#### 3. Get All Expenses
+#### 6. Get All User Expenses
 * **Endpoint**: `GET /expenses`
-* **Description**: Retrieves all recorded expenses from the database.
-* **Response**:
+* **Authentication**: Bearer token required.
+* **Description**: Retrieves all expenses associated with the authenticated user.
+* **Response** (`200 OK`):
   ```json
   [
-    [
-      42.50,
-      "Food",
-      "Lunch at diner",
-      "2026-06-24T22:52:00.123456"
-    ]
+    {
+      "amount": 42.50,
+      "category": "Food",
+      "description": "Lunch at diner",
+      "created_at": "2026-06-28T12:06:20.541765"
+    }
   ]
   ```
 
-#### 4. Get Total Expenditure
+#### 7. Get Total Expenditure
 * **Endpoint**: `GET /TotalExpenses`
-* **Description**: Calculates the sum of all expenses.
-* **Response**:
+* **Authentication**: Bearer token required.
+* **Description**: Calculates the sum of all expenses belonging to the authenticated user.
+* **Response** (`200 OK`):
   ```json
   42.50
   ```
@@ -133,11 +192,22 @@ Once the server is running, you can explore the endpoints interactively via:
 
 ## 🗄️ Database Schema
 
-The database (`expenses.db`) contains a single table `expenses` structured as follows:
+The database (`database.db`) is automatically initialized with two tables:
 
+### 1. `users` Table
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
-| `amount` | `REAL` | `NOT NULL` | The monetary value of the expense |
-| `category` | `TEXT` | `NOT NULL` | Category of the expense (e.g., Food, Travel) |
-| `description` | `TEXT` | | Optional notes (populated from `desc` in requests) |
-| `created_at` | `TEXT` | | ISO-8601 string of when the expense was added |
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique identifier for the user |
+| `username` | `VARCHAR(50)` | `NOT NULL UNIQUE` | Unique username |
+| `email` | `VARCHAR(50)` | `NOT NULL` | User email address |
+| `full_name` | `VARCHAR(50)` | `NOT NULL` | User's full name |
+| `hashed_password` | `TEXT` | `NOT NULL` | Hashed user password |
+
+### 2. `expenses` Table
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `amount` | `REAL` | `NOT NULL` | Monetary value of the expense |
+| `category` | `TEXT` | `NOT NULL` | Category of the expense |
+| `description` | `TEXT` | | Description/note |
+| `created_at` | `TEXT` | | Timestamp of creation (ISO-8601) |
+| `user_id` | `INTEGER` | `REFERENCES users(id)` | Foreign key identifying the expense owner |
